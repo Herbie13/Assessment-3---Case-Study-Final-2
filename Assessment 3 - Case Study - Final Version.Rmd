@@ -1,0 +1,914 @@
+---
+title: "**Assessment 3 / Case Study / Super Netball**"
+author: "**David Herbert**"
+output: 
+  flexdashboard::flex_dashboard:
+    storyboard: true
+    css: "styles.css"
+---
+
+```{r setup, include=FALSE}
+# Firstly, ensure all required packages are loaded in the library
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(viridis)
+library(DT)
+library(plotly)
+library(leaflet)
+library(flexdashboard)
+```
+## ___________________________________________________________________________________
+##
+##
+## **'Assessment 3 - Case Study'**
+##
+##
+## ________________________________________________________________________________
+##
+##
+## **Introduction**
+##
+##
+## ________________________________________________________________________________
+##
+##
+## This case study examines **player and team performance in the 2020 Super Netball season**, focusing on key performance indicators that coaches can use to enhance their decision making. After some investigation I found the key analytcial areas that Netball Coaches wish to know about include:
+##
+## **- Top Performers (Player & Team)**
+## **- Scoring efficiency**
+## **- Turnovers & possession control**
+## **- Defensive strength**
+## **- Midcourt performance**
+## **- Discipline (penalties & fouls)**
+##
+##
+```{r}
+# Load up the data set 
+SuperNetball_data <- read_csv("Dataset3_Assessment3.csv", show_col_types = FALSE)
+
+# Convert both 'Athlete' and 'Team' to categorical variables this allows my R analysis to become more efficient, accurate, and visually clear.  It correctly groups data to assist in visualisations.
+SuperNetball_data <- SuperNetball_data %>%
+  mutate(Athlete = as.factor(Athlete),
+         Team = as.factor(Team),
+         Statistic = as.factor(Statistic))
+
+# Create Team Performance data set 
+team_performance <- SuperNetball_data %>%
+  group_by(Team) %>%
+  summarise(Total_Performance = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Performance))
+
+# Ensure no duplicate rows
+SuperNetball_data <- distinct(SuperNetball_data)
+
+# Check for negative values
+negative_values <- SuperNetball_data %>%
+  filter(Total < 0)
+
+# If negative values exist, replace them with zero (or another decision)
+SuperNetball_data <- SuperNetball_data %>%
+  mutate(Total = ifelse(Total < 0, 0, Total))
+
+
+```
+## ___________________________________________________________________________________
+##
+##
+## **1. Boxplot representing 'Statisical Distribution of the Super Netball data'**
+##
+##
+## ___________________________________________________________________________________
+##
+##
+## Creation of a boxplot to view the statistical distribution of the varying statistics.
+## The wider the spread indicates the variation in player performance. 
+## Any outliers indicate the exceptional or in some instances underperforming players.
+## Colourblind friendly colours are utilised for ease of viewing.
+## The plot helps the coach to understand the distribution of player performance.
+## Its helps with the following coach decisions
+##
+## - Player development - which may address
+## - Game strategy 
+## - Recruitment of players
+##
+##
+```{r, , fig.width=14, fig.height=6}
+ggplot(SuperNetball_data, aes(x = Statistic, y = Total, fill = Statistic)) +
+  geom_boxplot(alpha = 0.8) + 
+  scale_fill_viridis_d(option = "D", begin = 0.1, end = 0.9) +  
+  labs(title = "Boxplot of Statistical Distribution",
+       x = "Statistic",
+       y = "Total Values") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title = element_text(size = 14, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    legend.position = "none"
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I wanted to show a holistic representation of the statistical distribution of all statistics, which would highlight 
+## 2. I spoke with a prominent Netball Coach to find what type of analysis was important
+## 3. To me this was challenging so I had to explore various steps from the lectures online to utilising the online resources provided to make relevant changes such as the colour friendly schemes were used
+## 4. Intially the X-axis was a blur and a sea of font that was not recnisabele so I had to angle the font so that you could read this
+## 5. Initially the graph was not very wide which made the whole plot unreadable so i work through a process of working out hwo to widen the plot for the fledasboard so it could be read
+```{r, , fig.width=14, fig.height=6}
+# Define shooting-related statistics
+scoring_stats <- c("goal_from_zone1", "goal_from_zone2", "attempt_from_zone1", "attempt_from_zone2")
+
+# Filter only shooting-related statistics
+shooting_data <- SuperNetball_data %>%
+  filter(Statistic %in% scoring_stats)
+
+# Convert data into wide format so that each athlete has separate shooting statistics
+shooting_summary <- shooting_data %>%
+  pivot_wider(names_from = Statistic, values_from = Total, values_fill = list(Total = 0))
+
+# Ensure required columns exist before using them
+required_columns <- c("goal_from_zone1", "goal_from_zone2", "attempt_from_zone1", "attempt_from_zone2")
+
+shooting_summary <- shooting_summary %>%
+  mutate(
+    goal_from_zone1 = coalesce(goal_from_zone1, 0),
+    goal_from_zone2 = coalesce(goal_from_zone2, 0),
+    attempt_from_zone1 = coalesce(attempt_from_zone1, 0),
+    attempt_from_zone2 = coalesce(attempt_from_zone2, 0)
+  )
+
+# Calculate Shooting Accuracy
+shooting_summary <- shooting_summary %>%
+  mutate(
+    Total_Goals = goal_from_zone1 + goal_from_zone2,
+    Total_Attempts = attempt_from_zone1 + attempt_from_zone2,
+    Shooting_Accuracy = ifelse(Total_Attempts > 0, (Total_Goals / Total_Attempts) * 100, 0)
+  )
+
+# Identify the Top 10 Shooters by Accuracy - create top shooters data 
+top_shooters <- shooting_summary %>%
+  arrange(desc(Shooting_Accuracy)) %>%
+  slice_head(n = 10)
+
+# Ensure no missing columns in team performance
+team_performance <- SuperNetball_data %>%
+  group_by(Team) %>%
+  summarise(Total_Performance = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Performance))
+
+# Top 10 Players Based on Total Performance
+top_players <- SuperNetball_data %>%
+  group_by(Athlete) %>%
+  summarise(Total_Sum = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Sum)) %>%
+  slice_head(n = 10)
+
+# Create the Top Performing Athletes Data 
+# Ensure no errors if top_players is empty
+if (nrow(top_players) > 0)
+  top_players_name <- top_players$Athlete[1]
+  
+# Filter Data for the Top Athlete
+  top_player_data <- SuperNetball_data %>%
+    filter(Athlete == top_players_name)
+
+# Create and cinsider the most recorded statistics 
+most_recorded_statistics <- SuperNetball_data %>%
+  group_by(Statistic) %>%
+  summarise(Total_Count = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Count)) %>%
+  slice_head(n = 10)
+```
+## ___________________________________________________________________________________
+##
+##
+## **Using Code create the following summary statistics for Super Netball 2020 season**
+## 
+##
+## ___________________________________________________________________________________
+##
+##
+## 1. Top 10 players based of total performance
+## 2. Top 10 teams based on total performance
+## 3. Top 10 shooters by accuracy
+## 4. Shooting Accuracy vs Total Attempts 
+## 5. Top 10 Shooters and where shots are coming from Zone 1 and Zone 2 
+## 6. Turnovers and breakdown of these turnovers
+## 7. Turnover distribution per team 
+## 8. Display the spread of defensive actions across varying statistics 
+## 9. Visualisation of the influence the midcourt has on Super Netball 
+## 10. Team Summary of mid court statistics 
+## 11. Top 10 penalised players 
+## 13. Visualisation of which teams receive the most penalties
+##
+##
+## __________________________________________________________________________________
+##
+##
+## **2. Top 10 Players by Performance** 
+##
+## __________________________________________________________________________________
+## 
+##
+## This bar chart plot helps coaches identify top-ranked players who have the greatest impact on their team’s success. 
+## It supports strategic planning by revealing key players to target defensively, neutralising their strengths. 
+## It provides data-driven insights for scouting and recruitment, ensuring teams focus on acquiring the best talent.
+##
+##
+## In the plot below you can clearly see the best players by performance=
+##
+##
+```{r, , fig.width=14, fig.height=6}
+ggplot(top_players, aes(x = reorder(Athlete, -Total_Sum), y = Total_Sum, fill = Athlete)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_viridis_d(option = "C") +
+  labs(title = "Top 10 Players by Performance",
+       x = "Athlete",
+       y = "Total Score") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold")  
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I wanted to show the Top 10 Players based on perforamnce 
+## 2. This is more of a summary statistics which oversee's a lot of the plots I would create later - Here is the best players by performance and my plots below would then show specifically why.
+## 3. Using gglot2, dplyr & virdis to make the plot 
+## 4. Work was completed earlier to discover top_players and intially I had an error due to a top_players line being empty so I worked throuh steps to eridcate and filter this within my script so that the plot would process. (if (nrow(top_players) > 0) top_players_name <- top_players$Athlete[1]  - top_player_data <- SuperNetball_data %>% - filter(Athlete == top_players_name))
+## 5. I kept this plot simple - being a coach I just want to know who is the best 
+## 6. Initially I had all of the View, DT (dataable), Print commands within my script but as I was knitting these all appeared.  I decided to take 
+## 7. I created a theme for my X axis, Y axis, legend which I liked (thems_minimal) and kept as a theme throughout the remiander of my plots where I could
+```{r, fig.width=14, fig.height=6}
+```
+## ___________________________________________________________________________________
+##
+##
+## **3. Top 10 Teams by Performance**
+##
+##
+## ________________________________________________________________________________
+## 
+##
+## This bar chart is desinged to ranks team by total performance
+## Helping coaches quickly identify the strongest and weakest teams. 
+## It provides data-driven insights to support strategy adjustments, game planning, and player development. 
+## The use Using colorblind-friendly colors adds clarity
+##
+##
+## In the plot below you can clearly see the teams by performance
+##
+##
+```{r, fig.width=14, fig.height=6}
+ggplot(team_performance, aes(x = reorder(Team, Total_Performance), y = Total_Performance, fill = Team)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +  
+  coord_flip() +
+  scale_fill_viridis_d(option = "C") +
+  labs(title = "Total Performance by Team", x = "Team", y = "Total Score") +
+  theme_minimal() +
+   theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold")  
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I wanted to show the Top 10 Teams based on perforamnce 
+## 2. This is a summary statistics which oversee's a lot of the plots I would create later - Here is the best players by performance and my plots below would then show specifically why.
+## 3.I used ggplotly2, Dplyr & Viridis to complete this plot 
+## 4. Ensured team_perforamnce was a numeric value 
+## 5. Learnt the group_by() and summarise() functions 
+## 6. Learnt how to reorder the X-Axis and add fill to the colour bars - flip coordinates coord_flip command and add colourblind frienly colours 
+## 7. Discovered how to adjust labels and make them more meaningful labs()
+## 8. Learnt how to adjust themes and found theme_minimal to be my favourite 
+## 9. This was an easy plot based on the plot above it was a matter of creating values for team_performance
+```{r, fig.width=14, fig.height=6}
+# Define shooting-related statistics
+scoring_stats <- c("goal_from_zone1", "goal_from_zone2", "attempt_from_zone1", "attempt_from_zone2")
+
+# Filter only shooting-related statistics
+shooting_data <- SuperNetball_data %>%
+  filter(Statistic %in% scoring_stats)
+
+# Convert data into wide format so that each athlete has separate shooting statistics
+shooting_summary <- shooting_data %>%
+  pivot_wider(names_from = Statistic, values_from = Total, values_fill = list(Total = 0)) %>%
+  mutate(
+    goal_from_zone1 = coalesce(goal_from_zone1, 0),
+    goal_from_zone2 = coalesce(goal_from_zone2, 0),
+    attempt_from_zone1 = coalesce(attempt_from_zone1, 0),
+    attempt_from_zone2 = coalesce(attempt_from_zone2, 0),
+    Total_Goals = goal_from_zone1 + goal_from_zone2,
+    Total_Attempts = attempt_from_zone1 + attempt_from_zone2,
+    Shooting_Accuracy = ifelse(Total_Attempts > 0, (Total_Goals / Total_Attempts) * 100, 0)
+  ) %>%
+  mutate(Shooting_Accuracy = as.numeric(Shooting_Accuracy))
+```
+## ___________________________________________________________________________________
+##
+##
+## **4. Bar Chart - Top 10 Shooters by Accuracy - Efficiency and Accuracy Analysis**
+##
+##
+## ________________________________________________________________________________
+##
+##
+## 
+## By creating this bar chart we are providing the coach with a ranking of the top 10 shooters by accuracy.
+## This helps coaches evaluate shooting efficency and can help with strategy offesnively.
+## This identifies the following:
+## - Most reliable shooters with high accuracy that can be focused on in crucial game situations, you want this person to shoot the ball 
+## - Helps to identify players with high accuracy but may also have low engaement in the game who the team may need to provide more opportunities 
+## - Looks at the consistency of each shooter and who is consistently converting attempts into goals
+## - Help with design around plays for specific players who show high accuracy
+## - Helps with lineup decisions, strategic plays, recrutiment 
+##
+## The whole focus is to provide the coach with informaiton to maximise the teams scoring potential.
+##
+##
+## ________________________________________________________________________________
+```{r, fig.width=14, fig.height=6}
+ggplot(top_shooters, aes(x = reorder(Athlete, Shooting_Accuracy), 
+                         y = Shooting_Accuracy, fill = Athlete)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +  
+  coord_flip() +
+  scale_fill_viridis_d(option = "C") +
+  labs(title = "Top 10 Shooters by Accuracy",
+       x = "Athlete",
+       y = "Shooting Accuracy (%)") +
+  theme_minimal() +
+   theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold")  
+  )
+
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I wanted to show the Top 10 Shooters based on accuracy 
+## 2. Same packages were used 
+## 3. Made sure Shootin_accuracy was numeric 
+## 4. I learnt hwo to transform data with pivot_wider() which meant the long format of hte dataset being utilised was able to be looke at in a wider format values like (goal_from_zone1, goal_from_zone2)
+## 5. Learnt to filter and the slice head function to ensure only top 10 players were selected
+## 6. Learnt who to present actual accuracy values and how to remove the legend
+## 7. I ran into issues with vlaues and found the coalesce command helped to ensure if any of these values are NA they were replaced by 0.  This was frustraing and I ended up googling and found this.  Helped to prevent the error I found and helped with later calcualtions.
+
+```{r}
+# Filter Shooting-Related Statistics
+shooting_stats <- c("goal_from_zone1", "goal_from_zone2")
+
+# Create shooting data, data set for ease of summary stats 
+shooting_data <- SuperNetball_data %>%
+  filter(Statistic %in% shooting_stats)
+
+# Convert Data into Long Format for Stacked Bar Chart which is essential when stacking  multiple categories.  This method allows data readability, simplifies analysis, filtering, grouping and summaries
+top_shooters_long <- top_shooters %>%
+  pivot_longer(cols = c(goal_from_zone1, goal_from_zone2), names_to = "Zone", values_to = "Goals")
+```
+## ___________________________________________________________________________________
+##
+##
+## **5. Top 10 Shooters, breakdown of wehre they shot the ball from Zone 1 or Zone 2**
+##
+## ___________________________________________________________________________________
+## 
+##
+## This stacked bar chart provides a breakdown of where the top 10 shooters score from—Zone 1 (close range) vs. Zone 2 (long range)—helping coaches refine offensive strategies.
+## Coach insights provided by the plot 
+## - It identifies if a player excels in close ot long range shooting
+## - It can help determine if a player is taking the right shot selection
+## - Plays can be designed to have the right player whoot the ball in the right spot 
+## - It can provide information on opposing players and generate scouting or defensive strategies to shut down opposing shooters.  It can help determine match ups 
+## - Help to assist recruiting decisions as the team may need a specialist shooter for a specific zone.
+##
+## 
+## ___________________________________________________________________________________
+```{r, fig.width=14, fig.height=6}
+ggplot(top_shooters_long, aes(x = reorder(Athlete, Total_Goals), y = Goals, fill = Zone)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +  
+  coord_flip() +
+  scale_fill_viridis_d(option = "C", begin = 0.2, end = 0.9, labels = c("Zone 1 Goals", "Zone 2 Goals")) +  
+  labs(title = "Top 10 Shooters: Goals Breakdown by Zone",
+       x = "Athlete",
+       y = "Total Goals",
+       fill = "Scoring Zone") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold")  
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I wanted to show the Top 10 Shooters and where they shot the ball from Zone 1 or 2
+## 2. Having earlier converting the data into wide format I found that I then had to convert this to long format to allow for a stacked bar chart
+## 3. I liked the idea of putting more detail behind the top shooters and showing the different areas where they execute skills.  
+## 4. I took out a lot of view, print, DT tables that were created to essentially have the information for the coach to be simple and visiable.
+
+```{r}
+```
+## ___________________________________________________________________________________
+##
+## 
+## **6. Scatter Plot of Shooting Accuracy vs Total Attempts**
+##
+## ___________________________________________________________________________________
+##
+##
+## This plot compares **shooting accuracy vs. total attempts**, helping coaches evaluate shooter efficiency.
+## It should help the coach with insights for the following:
+## - Identifies players with high accuracy & high attempts who you want shooting the ball at crucial times 
+## - Identifies players with low accuracy but high attempts so exploration as to why must be a consideration, maybe poor sot selection, technique etc.
+## - Recruitment & scouting – Shows which players to target as elite shooters 
+## - Adjustments to the style of play may be crucial show that you have the ball in the right shooters handds at the right time. 
+##
+##
+##____________________________________________________________________________________
+```{r, fig.width=14, fig.height=6}
+ggplot(top_shooters, aes(x = Total_Attempts, y = Shooting_Accuracy)) +
+  geom_point(aes(color = Athlete), size = 4, alpha = 0.9) +  
+  geom_smooth(method = "lm", color = "#D55E00", linetype = "dashed", se = FALSE) +  
+  geom_text(aes(label = Athlete), vjust = -0.8, hjust = 0.5, size = 5, color = "black") +
+  scale_color_viridis_d(option = "C", begin = 0.2, end = 0.9) +  
+  labs(
+    title = "Shooting Accuracy vs. Total Attempts (Top 10 Shooters)",
+    x = "Total Shot Attempts",
+    y = "Shooting Accuracy (%)",
+    color = "Athlete"
+  ) + 
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold")  
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I wanted to show my plotting skills by attempting a scatter plot which represents Shooting Accuracy vs Total Attempts 
+## 2. I added a trend line to this plot to help show trends for the top 10 shooters geom_smooth
+## 3. I used colours to differentiate players and created transpency with the blind frinedly colours using alpha = 0.9 
+## 4. Minimal_theme makes the plot look mroe modern
+## 5. When running this in the flexdashboard I found errors in this plot of small text appearing.  I found 2 errors here.  1 = now space after the 2 hash marks ## 2. only one hash mark # this resulted in me searching for reasons as to why which was frustrating
+```{r}
+# Create a summary of the turnover related statistics which include bad passes, bad hands, general play turnovers and missed goal turnovers. This will allow coaches to identify teams that may be strugglign with the ball.
+turnover_data <- SuperNetball_data %>%
+  filter(Statistic %in% c("badPasses", "badHands", "generalPlayTurnovers", "missedGoalTurnover")) %>%
+  group_by(Team) %>%
+  summarise(Total_Turnovers = sum(Total))
+
+# Provide a summary of turnovers by the type and team 
+turnover_breakdown <- SuperNetball_data %>%
+  filter(Statistic %in% c("badPasses", "badHands", "generalPlayTurnovers", "missedGoalTurnover")) %>%
+  group_by(Team, Statistic) %>%
+  summarise(Total_Turnovers = sum(Total), .groups = "drop")
+```
+## __________________________________________________________________________________
+##
+##
+## **7. Stacked Bar Chart showing amount of turnovers and breakdown of these turnovers** 
+##
+## __________________________________________________________________________________
+##
+##
+## This stacked bar chart breaks down turnovers by type (bad passes, bad hands, missed goal turnovers) for each team.
+## – Identifies the most frequent turnover types so the coach can target these areas
+## - Focus on specific possession control, adjusting training focus on passing accuracy, ball secutity and shot selection
+##
+## 
+## This in turn should help the coach lead the team to better possession control and fewer wasted opportuniities 
+##
+##
+```{r, fig.width=14, fig.height=6}
+ggplot(turnover_breakdown, aes(x = reorder(Team, -Total_Turnovers), y = Total_Turnovers, fill = Statistic)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Turnover Breakdown by Type per Team", x = "Team", y = "Total Turnovers") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold"),
+    scale_fill_viridis_d(option = "C")
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. This stacked bar chart shwo istribution by team 
+## 2. Had to re order teams by the total turnovers
+## I had to flip the x-axis and y-axis for readability and find ways to do this.  coord_flip() allow me to do this 
+## 3. I used minimal_theme to keep everything consistent throughout case study
+## 4. I increase font size and used vridis colorblind friendly colours for readability 
+```{r}
+```
+## ___________________________________________________________________________________
+##
+##
+## **8. Boxplot of turnover distribution per team** 
+##
+## ___________________________________________________________________________________
+##
+##
+## This boxplot shows the spread of turnovers per team helping understand the spread, median and presence of outliers
+## Coaches are able to assess the following 
+## - Impartance of ball security.
+## - Teams struggling with turnovers with the outliers revealing teams making excessive errors
+## - It helps to correlate turnoves with performance and games success
+## - Can privide a focus on what sort of ball security drills which will helpd reduce unforced erros and provide higher levels of possession.
+##
+##
+## __________________________________________________________________________________
+```{r, fig.width=14, fig.height=6}
+ggplot(turnover_breakdown, aes(x = Team, y = Total_Turnovers, fill = Team)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red") +
+  coord_flip() +
+  labs(title = "Turnovers Distribution per Team", x = "Team", y = "Total Turnovers") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold"),
+    scale_fill_viridis_d(option = "C"))
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. This boxplot is aimed to extend my plotting skills and show turnover distribution of teams
+## 2. Created boxplot geom_boxplot
+## 3. Once again I had to flip coordinates for readbility
+## 4. Applied theme-minimal() and colourblind friendly colours - cut and paste the theme 
+```{r}
+# Define Defensive Statistics (Fix Missing Variable)
+defensive_stats <- c("intercepts", "deflections", "blocks", "rebounds")
+
+# Filter defensive statistics
+defensive_data <- SuperNetball_data %>%
+  filter(Statistic %in% defensive_stats) %>%
+  group_by(Athlete) %>%
+  summarise(Total_Defensive_Actions = sum(Total)) %>%
+  arrange(desc(Total_Defensive_Actions))
+
+# Filter defensive statistics
+defensive_data <- SuperNetball_data %>%
+  filter(Statistic %in% defensive_stats)
+
+# Summarize defensive performance by athlete
+defensive_summary <- defensive_data %>%
+  group_by(Athlete, Statistic) %>%
+  summarise(Total_Defensive_Actions = sum(Total), .groups = "drop")
+```
+## ___________________________________________________________________________________
+##
+##
+## **9. Whisker Box Plot to show the spread of defensive actions across various statistics**
+##
+##
+## ___________________________________________________________________________________
+## 
+
+## This boxplot highlights defensive statistics, intercepts, deflections, blocks and rebounds to evaluate defensive strengths.
+## Coach is able to utilise this information to:
+## - Help improve defensive training and focus on which actions need work 
+## - Ability to work on key team strategies by focusing on defensive strengths 
+## - Focus on areas that have a high median but may also have many outliers as it suggest a few players doing most of the work 
+## - If their is a small spread it means players performa similarily in this area
+## - Where their are outliers it may help coach to reward top performers and address the inconstent ones at the other extreme
+##
+##
+## ___________________________________________________________________________________
+```{r, fig.width=14, fig.height=6}
+ggplot(defensive_summary, aes(x = Statistic, y = Total_Defensive_Actions, fill = Statistic)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  scale_fill_viridis_d(option = "C") +
+  labs(title = "Distribution of Defensive Actions Across Players",
+       x = "Defensive Statistic",
+       y = "Total Defensive Actions") +
+  theme_classic() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold"),
+    scale_fill_viridis_d(option = "C")
+  )
+```
+
+
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. This boxplot is aimed to extend my plotting skills showing distribution of defensive actions across players
+## 2. geom_boxplot to generate the boxplot 
+## 3. aes and viridis and this time used theme-classic() and colourblind friendly colours - cut and paste the theme 
+## 4. As per all plots I took out the str, view, print, DT for ease of presenting data in the flexdashboard
+## 5. Learnt to hihglight outliers in red and use solid red dots 
+```{r}
+# Define midcourt-related statistics
+midcourt_stats <- c("feeds", "feedWithAttempt", "centrePassReceives")
+
+# Filter and summarize midcourt data
+midcourt_data <- SuperNetball_data %>%
+  filter(Statistic %in% midcourt_stats) %>%
+  group_by(Athlete) %>%
+  summarise(Total_Feeds = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Feeds))
+
+```
+## ___________________________________________________________________________________
+
+##
+##
+## **10. Visualisation of the influence the midcourt has on Super Netball League**
+##
+##
+## ___________________________________________________________________________________
+##
+##
+## This bar chart plot compares feeds, feed attempts, and center pass receives across teams, highlighting midcourt playmakers
+## Caoches utlising this bar chart can fdin the following:
+## - Can identify strign playmakers who are found to have high feeds and feed attempts
+## - Can see players with an ability to progress the ball with high centre pass recieves and then who excel at tranistioning to attack.
+## - It identifies pplayers with efficiency who reduce risky passes and ensure controlled feeds 
+##
+##
+```{r, fig.width=14, fig.height=6}
+ggplot(head(midcourt_data, 10), aes(x = reorder(Athlete, -Total_Feeds), y = Total_Feeds, fill = Athlete)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top 10 Playmakers (Feeds)", x = "Athlete", y = "Total Feeds") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold"),
+    scale_fill_viridis_d(option = "C")
+  )
+
+```
+
+
+##
+##
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. This boxplot is aimed to extend my plotting skills showing distribution of defensive actions across players
+## 2. geom_boxplot to generate the boxplot 
+## 3. aes and viridis and this time used theme-classic() and colourblind friendly colours - cut and paste the theme 
+## 4. As per all plots I took out the str, view, print, DT for ease of presenting data in the flexdashboard
+## 5. Learnt to hihglight outliers in red and use solid red dots 
+```{r, fig.width=14, fig.height=6}
+# Define Midcourt-Related Statistics
+midcourt_stats <- c("feeds", "feedWithAttempt", "centrePassReceives")
+
+# Filter the data to focus on midcourt statistics
+midcourt_data <- SuperNetball_data %>%
+  filter(Statistic %in% midcourt_stats)
+
+# Summarize Midcourt Performance by Team
+midcourt_team_summary <- SuperNetball_data %>%
+  filter(Statistic %in% midcourt_stats) %>%
+  group_by(Team, Statistic) %>%
+  summarise(Total_Actions = sum(Total), .groups = "drop")
+```
+## ___________________________________________________________________________________
+##
+##
+## **11. Grouped Bar Chart - Team Summary of Midcourt Statistics**
+##
+##
+## ___________________________________________________________________________________
+##
+##
+## This grouped bar chart compares midcourt performance across teams
+## The focus is on the following to evaluate ball distribution efficiency 
+## - Feeds
+## - Feed Attempts
+## - Centre Pass Recieves 
+##
+##
+## This will help coaches to recruit strong playmakers, as teams with high feeds and feed attempts mean more possession and generally means more scoring opportunities
+## Considers transition efficency with high centre pass receives indicating strong ball progression from defence to offence 
+## Scouting so that weakness can be exploited such as teams with poor ball movement
+## If the team they coach has low feeds but high attempts a focus may be needed on accuracy and execution.
+## Helps to refine midcourt strategies and improve passing accuracy 
+##
+##
+```{r, fig.width=14, fig.height=6}
+ggplot(midcourt_team_summary, aes(x = Team, y = Total_Actions, fill = Statistic)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_viridis_d(option = "C") +
+  labs(title = "Midcourt Performance by Team: Feeds, Feed Attempts & Centre Pass Receives",
+       x = "Team",
+       y = "Total Actions",
+       fill = "Midcourt Statistic") +
+  theme_minimal() +
+  theme(
+    element_text(angle = 45, hjust = 1),         
+    axis.text.x = element_text(size = 16, angle = 45, hjust = 1),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold"),
+    scale_fill_viridis_d(option = "C")
+  )
+```
+
+
+## 
+##
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. This boxplot is aimed to extend my plotting skills showing distribution of defensive actions across players
+## 2. geom_boxplot to generate the boxplot 
+## 3. aes and viridis and this time used theme-classic() and colourblind friendly colours - cut and paste the theme 
+## 4. As per all plots I took out the str, view, print, DT for ease of presenting data in the flexdashboard
+## 5. Learnt to hihglight outliers in red and use solid red dots 
+```{r}
+# Define midcourt-related statistics
+midcourt_stats <- c("feeds", "feedWithAttempt", "centrePassReceives")
+
+# Filter and summarize midcourt data
+midcourt_data <- SuperNetball_data %>%
+  filter(Statistic %in% midcourt_stats) %>%
+  group_by(Athlete) %>%
+  summarise(Total_Feeds = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Feeds))
+```
+## ____________________________________________________________________________________
+##
+##
+## **12. Grouped Bar Chart - Top 10 penalised players** 
+##
+##
+## ____________________________________________________________________________________
+## 
+##
+## The grouped bar chart can look at the Top 10 Players and provide the follwoing insights for coaches
+## - Identifiy players who commit the highest amount of penalties 
+## - It idenitifies the specifc type of penalty the commits
+## - It can help a coach with specific focus points to work with players on redcuing specific defensive techniques
+## - It may help the coach to understand how to reduce unecessary fouls 
+##
+##
+## ___________________________________________________________________________________
+
+```{r, fig.width=14, fig.height=6}
+# Define penalty statistics
+penalty_stats <- c("contactpenalties", "obstructionpenalties", "breaks", "offsides")
+
+# Extract penalty-related statistics for players
+penalty_data <- SuperNetball_data %>%
+  filter(tolower(Statistic) %in% penalty_stats) %>%
+  group_by(Athlete, Statistic) %>%  # Use correct column name for player
+  summarise(Total_Penalties = sum(Total, na.rm = TRUE), .groups = "drop")
+
+# Identify the top 10 penalized players
+top_penalised_players <- penalty_data %>%
+  group_by(Athlete) %>%  
+  summarise(Total_Penalties = sum(Total_Penalties, na.rm = TRUE)) %>%
+  arrange(desc(Total_Penalties)) %>%
+  slice_head(n = 10)
+
+# Filter dataset to include only the top 10 players
+penalty_top10 <- penalty_data %>%
+  filter(Athlete %in% top_penalised_players$Athlete)
+
+# Create the grouped bar chart
+ggplot(penalty_top10, aes(x = reorder(Athlete, -Total_Penalties), y = Total_Penalties, fill = Statistic)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  scale_fill_viridis_d(option = "C") +
+  labs(
+    title = "Top 10 Penalised Players by Penalty Type",
+    x = "Player",
+    y = "Total Penalties",
+    fill = "Penalty Type"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 16),
+    axis.text.x = element_text(size = 14, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 14),
+    axis.title = element_text(size = 16, face = "bold"),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold")
+  )
+
+```
+
+
+## 
+##
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. I searched for a plot that would effectively compare multiple catergories which in this case was penalty types, within each players group.  It borke down the penalty count by type.  My search led me to a dodged bar chart. position_dodge() with each penalty type appearing as a seperate bar within each players catergory.
+## - I had to reorder the x-axis from highest to lowest penalites
+## - Improve readabilty, colourblind friendly colours, theme_minimal etc 
+```{r}
+``` 
+
+##
+##
+## **13. Whisker Plot - Penalty distribution by type of penalty**
+##
+## ___________________________________________________________________________________
+##
+##
+## This boxplot visualizes penalty distribution by type, helping coaches assess team discipline and defensive tendencies.
+##
+## Key Insights for Coaches:
+## _ Identify teams with high penalty counts 
+## _ Certain teams may struggle with contact, obstruction, or offside penalties, indicating areas for improvement.
+## _ Addressing high-penalty areas can lead to better game control and fewer opposition scoring opportunities.
+## _ Target teams with consistent penalty issues to exploit weaknesses in key game moments.
+## _ This insight helps coaches improve team discipline, refine defensive strategies, and minimize costly errors. 
+##
+##
+```{r, fig.width=14, fig.height=6}
+ggplot(penalty_data, aes(x = Statistic, y = Total_Penalties, fill = Statistic)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  scale_fill_viridis_d(option = "C") +
+  labs(title = "Whisker Plot: Distribution of Penalties Across Teams",
+       x = "Penalty Type",
+       y = "Total Penalties") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 18),         
+    axis.text.x = element_text(size = 16),  
+    axis.text.y = element_text(size = 16),  
+    axis.title = element_text(size = 18, face = "bold"),  
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  
+    legend.text = element_text(size = 14),  
+    legend.title = element_text(size = 16, face = "bold"),
+    scale_fill_viridis_d(option = "C")
+  )
+```
+
+
+## 
+##
+## **Tools, Workflow and Proccesses used for the above plot**
+##
+## 1. This whisker boxplot is aimed to extend my plotting skills showing distribution of defensive actions across players
+## 2. geom_boxplot to generate the boxplot 
+## 3. aes and viridis and this time used theme_minimal() and colourblind friendly colours - cut and paste the theme 
+## 4. As per all plots I took out the str, view, print, DT for ease of presenting data in the flexdashboard
+## 5. Learnt to hihglight outliers in red and use solid red dots 
